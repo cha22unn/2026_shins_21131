@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 층간소음 선택적 노이즈 캔슬링 시뮬레이터</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎛️</text></svg>">
+  <link rel="stylesheet" href="./style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 헤더 -->
+    <header class="app-header">
+      <div class="header-content">
+        <div class="logo-area">
+          <span class="logo-icon">🎛️</span>
+          <div>
+            <h1>AI 층간소음 선택적 노이즈 캔슬링 시뮬레이터</h1>
+            <p class="subtitle">Selective Active Noise Cancellation via SVM-RBF Spectral Classifier</p>
+          </div>
+        </div>
+        <div class="system-status">
+          <span class="model-badge" id="model-status-badge">
+            <span class="status-dot"></span> SVM 모델 로딩 중...
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 작동 원리 요약 배너 -->
+    <section class="banner-section">
+      <div class="banner-card">
+        <div class="banner-header">
+          <div class="banner-title">
+            <span class="banner-icon">💡</span>
+            <h3>선택적 노이즈 캔슬링(Selective ANC) 작동 원리</h3>
+          </div>
+          <span class="tag">AI + Web Audio</span>
+        </div>
+        <p class="banner-desc">
+          층간소음(발소리·충격음)은 <strong>20~250Hz 저주파 대역</strong>에 에너지가 집중되는 반면, 사람의 목소리는 <strong>250~4000Hz 중·고주파 대역</strong>에 주로 분포합니다.
+          학습된 <strong>SVM (RBF 커널) AI 모델</strong>이 오디오 스펙트럼을 정밀 분석하여, <strong>발소리 감지 시 역위상 파동(-Signal)</strong>을 발생시켜 소음을 물리적으로 상쇄 소멸시키고, <strong>말소리 감지 시 제어를 우회(Bypass)</strong>하여 대화 음성을 100% 보존합니다.
+        </p>
+        <div class="principle-steps">
+          <div class="p-step">
+            <span class="step-num">1</span>
+            <div class="step-text">
+              <strong>스펙트럼 특징 추출</strong>
+              <span>RMS 정규화 후 Radix-2 FFT로 주파수 파워 스펙트럼 분석</span>
+            </div>
+          </div>
+          <div class="p-step">
+            <span class="step-num">2</span>
+            <div class="step-text">
+              <strong>SVM AI 판별</strong>
+              <span>3대 핵심 속성(저주파·중고주파·비율) 기반 실시간 분류</span>
+            </div>
+          </div>
+          <div class="p-step">
+            <span class="step-num">3</span>
+            <div class="step-text">
+              <strong>선택적 위상 제어</strong>
+              <span>소음은 역위상 180° 상쇄(0dB), 음성은 왜곡 없이 원본 투과</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 메인 대시보드 그리드 -->
+    <div class="dashboard-grid">
+      <!-- 좌측 / 상단: 입력 및 분석 패널 -->
+      <div class="panel-column left-column">
+        <!-- 1. 오디오 입력 카드 -->
+        <section class="card input-card">
+          <div class="card-header">
+            <h3><span class="card-icon">📥</span> 1. 오디오 신호 입력</h3>
+            <span class="badge-sub">WAV 포맷</span>
+          </div>
+
+          <!-- 드래그 앤 드롭 업로더 -->
+          <div class="drop-zone" id="drop-zone">
+            <input type="file" id="file-input" accept=".wav,audio/wav" class="file-input-hidden">
+            <div class="drop-zone-content">
+              <span class="upload-icon">📂</span>
+              <p class="drop-text">WAV 파일을 여기에 드래그하거나 <strong>클릭하여 업로드</strong></p>
+              <span class="drop-hint">모노/스테레오 16·24·32bit PCM 지원</span>
+            </div>
+          </div>
+
+          <!-- 원클릭 샘플 테스트 버튼 -->
+          <div class="samples-container">
+            <span class="samples-label">원클릭 테스트 샘플:</span>
+            <div class="sample-buttons">
+              <button type="button" class="btn btn-sample" id="btn-sample-footstep">
+                <span class="btn-emoji">👣</span>
+                <span class="btn-text">
+                  <strong>발소리 샘플</strong>
+                  <small>ESC-50 Footsteps (충격음)</small>
+                </span>
+              </button>
+              <button type="button" class="btn btn-sample" id="btn-sample-voice">
+                <span class="btn-emoji">🗣️</span>
+                <span class="btn-text">
+                  <strong>말소리 샘플</strong>
+                  <small>RAVDESS Speech (인간 음성)</small>
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 오디오 파일 메타데이터 -->
+          <div class="audio-meta" id="audio-meta" style="display: none;">
+            <div class="meta-item">
+              <span class="meta-label">파일명</span>
+              <span class="meta-val" id="meta-filename">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">샘플 레이트</span>
+              <span class="meta-val" id="meta-sr">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">길이 / 프레임</span>
+              <span class="meta-val" id="meta-length">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">채널</span>
+              <span class="meta-val" id="meta-channels">-</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. AI 판별 결과 카드 -->
+        <section class="card result-card">
+          <div class="card-header">
+            <h3><span class="card-icon">🧠</span> 2. AI 판별 및 ANC 제어 상태</h3>
+            <span class="badge-sub">SVM-RBF Classifier</span>
+          </div>
+
+          <!-- 판별 배지 -->
+          <div class="decision-badge-container">
+            <div class="decision-badge badge-idle" id="decision-badge">
+              <div class="badge-icon" id="badge-icon">⏳</div>
+              <div class="badge-text-wrap">
+                <h4 id="badge-title">오디오를 입력하세요</h4>
+                <p id="badge-desc">파일을 업로드하거나 위의 샘플 버튼을 클릭하면 실시간 분석이 시작됩니다.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- SVM 결정 점수 게이지 바 -->
+          <div class="score-container">
+            <div class="score-header">
+              <span>SVM 결정 점수 (Decision Score)</span>
+              <strong id="score-value" class="mono">0.0000</strong>
+            </div>
+            <div class="score-track">
+              <div class="score-zone zone-footsteps">Footsteps (소음 상쇄)</div>
+              <div class="score-zero-line"><span>0.0</span></div>
+              <div class="score-zone zone-voice">Voice (음성 투과)</div>
+              <div class="score-pointer" id="score-pointer" style="left: 50%;"></div>
+            </div>
+            <div class="score-legend">
+              <span>◀ 음수: 층간소음(Footsteps) 판별</span>
+              <span>양수: 말소리(Voice) 판별 ▶</span>
+            </div>
+          </div>
+
+          <!-- 핵심 속성 3가지 카드 & 바 -->
+          <div class="features-section">
+            <h4 class="section-title">스펙트럼 핵심 속성 (Feature Vector)</h4>
+            <div class="feature-cards">
+              <!-- 특성 1: 저주파 에너지 -->
+              <div class="feature-card">
+                <div class="f-top">
+                  <span class="f-name">저주파 대역 에너지</span>
+                  <span class="f-band">20 ~ 250 Hz</span>
+                </div>
+                <div class="f-val-row">
+                  <span class="f-val mono" id="val-low-energy">-</span>
+                  <span class="f-unit">power</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill fill-low" id="bar-low-energy" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <!-- 특성 2: 중고주파 에너지 -->
+              <div class="feature-card">
+                <div class="f-top">
+                  <span class="f-name">중·고주파 대역 에너지</span>
+                  <span class="f-band">250 ~ 4000 Hz</span>
+                </div>
+                <div class="f-val-row">
+                  <span class="f-val mono" id="val-mid-energy">-</span>
+                  <span class="f-unit">power</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill fill-mid" id="bar-mid-energy" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <!-- 특성 3: 저주파 비율 -->
+              <div class="feature-card">
+                <div class="f-top">
+                  <span class="f-name">저주파 에너지 비율</span>
+                  <span class="f-band">Low / Total %</span>
+                </div>
+                <div class="f-val-row">
+                  <span class="f-val mono" id="val-ratio">-</span>
+                  <span class="f-unit">%</span>
+                </div>
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill fill-ratio" id="bar-ratio" style="width: 0%;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 우측 / 하단: 파형 시각화 및 청취 시뮬레이션 패널 -->
+      <div class="panel-column right-column">
+        <section class="card visualizer-card">
+          <div class="card-header">
+            <h3><span class="card-icon">📊</span> 3. 노이즈 캔슬링 파형 실시간 시뮬레이션</h3>
+            <div class="audio-controls-header">
+              <!-- 재생 컨트롤 버튼들 -->
+              <button type="button" class="btn btn-audio btn-play-orig" id="btn-play-orig" disabled>
+                <span class="play-icon">▶</span>
+                <span>원본 소리 재생</span>
+              </button>
+              <button type="button" class="btn btn-audio btn-play-anc" id="btn-play-anc" disabled>
+                <span class="play-icon">▶</span>
+                <span>ANC 적용 후 소리 재생</span>
+              </button>
+              <button type="button" class="btn btn-audio btn-stop" id="btn-stop" disabled>
+                <span>⏹ 정지</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 재생 상태 및 타임코드 바 -->
+          <div class="playback-bar">
+            <div class="playback-status" id="playback-status">
+              <span class="dot-idle"></span> 준비됨
+            </div>
+            <div class="playback-time mono" id="playback-time">00:00.00 / 00:00.00</div>
+          </div>
+
+          <!-- 3단 파형 비교 그래프 -->
+          <div class="waveforms-container">
+            <!-- 파형 1: 원본 신호 -->
+            <div class="waveform-block">
+              <div class="waveform-label-row">
+                <div class="w-label">
+                  <span class="wave-tag tag-orig">그래프 1</span>
+                  <strong>원본 입력 오디오 파형 (Original Signal)</strong>
+                </div>
+                <span class="wave-info mono" id="info-orig">x(t) [입력 음향]</span>
+              </div>
+              <div class="canvas-wrapper">
+                <canvas id="canvas-orig" class="wave-canvas"></canvas>
+                <div class="playhead" id="playhead-orig"></div>
+                <div class="zero-axis"></div>
+              </div>
+            </div>
+
+            <!-- 파형 2: AI 제어 파형 -->
+            <div class="waveform-block">
+              <div class="waveform-label-row">
+                <div class="w-label">
+                  <span class="wave-tag tag-anti" id="tag-anti">그래프 2</span>
+                  <strong id="title-anti">AI 제어 파형 (Anti-Noise Signal)</strong>
+                </div>
+                <span class="wave-info mono" id="info-anti">c(t) = -x(t) (역위상) 또는 0 (우회)</span>
+              </div>
+              <div class="canvas-wrapper">
+                <canvas id="canvas-anti" class="wave-canvas"></canvas>
+                <div class="playhead" id="playhead-anti"></div>
+                <div class="zero-axis"></div>
+              </div>
+            </div>
+
+            <!-- 파형 3: 최종 출력 파형 -->
+            <div class="waveform-block">
+              <div class="waveform-label-row">
+                <div class="w-label">
+                  <span class="wave-tag tag-out" id="tag-out">그래프 3</span>
+                  <strong id="title-out">최종 출력 파형 (Canceled Output)</strong>
+                </div>
+                <span class="wave-info mono" id="info-out">y(t) = x(t) + c(t) [최종 전달 음향]</span>
+              </div>
+              <div class="canvas-wrapper">
+                <canvas id="canvas-out" class="wave-canvas"></canvas>
+                <div class="playhead" id="playhead-out"></div>
+                <div class="zero-axis"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 청취 시연 안내 팁 -->
+          <div class="listening-guide">
+            <div class="guide-item">
+              <span class="guide-badge badge-footstep">발소리 판별 시</span>
+              <p>ANC 제어 신호로 <strong>정확히 180도 반대 부호(-원본)</strong> 파형이 합성되어, 최종 출력은 <strong>0 (완전 무음)</strong>으로 상쇄됩니다. 재생 시 발소리가 감쪽같이 사라지는 것을 들을 수 있습니다.</p>
+            </div>
+            <div class="guide-item">
+              <span class="guide-badge badge-voice">말소리 판별 시</span>
+              <p>AI가 인체 대화 음성을 인식하여 제어 파형을 <strong>0 (비작동)</strong>으로 유지하므로, <strong>원본 음성이 100% 온전하게 통과</strong>되어 명확히 들립니다.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 하단 푸터 -->
+    <footer class="app-footer">
+      <div class="footer-content">
+        <p>AI Selective Active Noise Cancellation • SVM RBF Kernel Model trained on Footsteps (ESC-50) & Voice (RAVDESS)</p>
+        <p class="footer-links">
+          <span>GitHub Pages Ready (Zero Backend, Pure Client-Side AudioContext & Radix-2 FFT)</span>
+        </p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 메인 스크립트 -->
+  <script src="./script.js"></script>
+</body>
+</html>
